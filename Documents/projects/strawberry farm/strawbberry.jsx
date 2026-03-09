@@ -14,6 +14,14 @@ const UPGRADES = [
   { id: "greenhouse", label: "Greenhouse", desc: "+2 strawberry cards per round", icon: "🏡", cost: 80 },
 ];
 
+const ASSET = {
+  strawberry: "/strawberry/assets/strawberry.png",
+  golden: "/strawberry/assets/strawberry.png",
+  bug: "/strawberry/assets/bug.png",
+  weed: "/strawberry/assets/weed.png",
+  rain: "/strawberry/assets/drop.png",
+};
+
 function generateDeck(upgrades) {
   const deck = [];
   let id = 0;
@@ -29,6 +37,23 @@ function generateDeck(upgrades) {
 
 const PHASES = { FARM: "farm", SELL: "sell", SHOP: "shop" };
 
+const styles = `
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    20% { transform: translateX(-6px); }
+    40% { transform: translateX(6px); }
+    60% { transform: translateX(-4px); }
+    80% { transform: translateX(4px); }
+  }
+  @keyframes sparkle {
+    0% { transform: scale(1); filter: brightness(1); }
+    40% { transform: scale(1.12); filter: brightness(1.6); }
+    100% { transform: scale(1); filter: brightness(1); }
+  }
+  .card-shake { animation: shake 0.4s ease; }
+  .card-sparkle { animation: sparkle 0.6s ease; }
+`;
+
 export default function StrawberrySolitaire() {
   const [coins, setCoins] = useState(0);
   const [round, setRound] = useState(1);
@@ -36,13 +61,14 @@ export default function StrawberrySolitaire() {
   const [deck, setDeck] = useState([]);
   const [selected, setSelected] = useState(null);
   const [harvest, setHarvest] = useState([]);
-  const [message, setMessage] = useState("Flip cards to find strawberries! Match pairs to harvest them.");
+  const [message, setMessage] = useState(null);
   const [flipsLeft, setFlipsLeft] = useState(18);
   const [upgrades, setUpgrades] = useState([]);
   const [roundEarnings, setRoundEarnings] = useState(0);
   const [rainActive, setRainActive] = useState(false);
   const [shake, setShake] = useState(null);
   const [sparkle, setSparkle] = useState(null);
+  const [locked, setLocked] = useState(false);
 
   const startRound = useCallback((upgs = upgrades) => {
     const newDeck = generateDeck(upgs);
@@ -54,14 +80,15 @@ export default function StrawberrySolitaire() {
     setHarvest([]);
     setFlipsLeft(18);
     setRainActive(false);
-    setMessage("🌱 A new field awaits! Find and match the strawberries.");
+    setMessage(null);
+    setLocked(false);
   }, [upgrades]);
 
   useEffect(() => { startRound(); }, []);
 
   const flipCard = (uid) => {
     const card = deck.find(c => c.uid === uid);
-    if (!card || card.flipped || card.matched || flipsLeft <= 0) return;
+    if (locked || !card || card.flipped || card.matched || flipsLeft <= 0) return;
 
     const newDeck = deck.map(c => c.uid === uid ? { ...c, flipped: true } : c);
     setDeck(newDeck);
@@ -80,7 +107,8 @@ export default function StrawberrySolitaire() {
       const penalty = -5;
       setRoundEarnings(e => e + penalty);
       setMessage(`🌿 A weed! ${penalty} coins.`);
-      setShake(uid); setTimeout(() => setShake(null), 400);
+      setShake(uid);
+      setTimeout(() => setShake(null), 400);
       setSelected(null);
       return;
     }
@@ -89,7 +117,8 @@ export default function StrawberrySolitaire() {
       const penalty = upgrades.includes("scarecrow") ? -7 : -15;
       setRoundEarnings(e => e + penalty);
       setMessage(`🐛 A bug got your berries! ${penalty} coins.`);
-      setShake(uid); setTimeout(() => setShake(null), 400);
+      setShake(uid);
+      setTimeout(() => setShake(null), 400);
       setSelected(null);
       return;
     }
@@ -106,12 +135,19 @@ export default function StrawberrySolitaire() {
         setDeck(d => d.map(c => (c.uid === uid || c.uid === selected.uid) ? { ...c, matched: true } : c));
         setMessage(`✨ Match! +${earned} coins${rainActive ? " (Rain Boost!)" : ""}!`);
         setRainActive(false);
-        setSparkle(uid); setTimeout(() => setSparkle(null), 600);
+        setSparkle(uid);
+        setTimeout(() => setSparkle(null), 600);
       } else {
-        setDeck(d => d.map(c => (c.uid === uid || c.uid === selected.uid) ? { ...c, flipped: false } : c));
-        setFlipsLeft(f => f + 1);
-        setMessage("❌ No match! Cards flipped back.");
-        setShake(uid); setTimeout(() => setShake(null), 400);
+        setLocked(true);
+        setMessage("❌ No match! Look carefully...");
+        setShake(uid);
+        setTimeout(() => setShake(null), 400);
+        setTimeout(() => {
+          setDeck(d => d.map(c =>
+            (c.uid === uid || c.uid === selected.uid) ? { ...c, flipped: false } : c
+          ));
+          setLocked(false);
+        }, 900);
       }
       setSelected(null);
     }
@@ -138,268 +174,337 @@ export default function StrawberrySolitaire() {
     startRound(upgrades);
   };
 
-  const unmatched = deck.filter(c => !c.matched);
   const berryCount = harvest.filter(c => c.id === "strawberry" || c.id === "golden").length / 2;
 
-  return (
-    <div style={{
-      minHeight: "100vh",
-      background: "linear-gradient(160deg, #1a0a2e 0%, #2d1b0e 50%, #0f1a0a 100%)",
-      fontFamily: "'Georgia', serif",
+  const pillBtn = (onClick, children, extra = {}) => ({
+    onClick,
+    style: {
+      background: "linear-gradient(135deg, #c84a1a, #8b2f0a)",
+      border: "2px solid #e86030",
+      borderRadius: "30px",
       color: "#f5e6c8",
-      padding: "0",
-      overflowX: "hidden",
-    }}>
-      {/* Header */}
+      fontFamily: "'Fredoka One', cursive",
+      fontSize: "16px",
+      cursor: "pointer",
+      padding: "10px 28px",
+      ...extra,
+    },
+  });
+
+  return (
+    <>
+      <style>{styles}</style>
       <div style={{
-        background: "linear-gradient(90deg, #4a1a0a, #8b2f0a, #4a1a0a)",
-        borderBottom: "3px solid #c8752a",
-        padding: "12px 24px",
         display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        boxShadow: "0 4px 20px rgba(200,100,30,0.3)",
+        flexDirection: "column",
+        height: "100vh",
+        maxWidth: "430px",
+        margin: "0 auto",
+        overflow: "hidden",
+        fontFamily: "'Nunito', sans-serif",
+        background: "#1a0a2e",
       }}>
-        <div>
-          <div style={{ fontSize: "22px", fontWeight: "bold", color: "#f5c842", letterSpacing: "2px", textShadow: "0 0 10px rgba(245,200,66,0.5)" }}>
-            🍓 Strawberry Solitaire
-          </div>
-          <div style={{ fontSize: "11px", color: "#c8a87a", letterSpacing: "1px" }}>ROUND {round} · FARM & MATCH</div>
-        </div>
-        <div style={{ display: "flex", gap: "20px", alignItems: "center" }}>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: "20px", color: "#f5c842" }}>🌾 {berryCount}</div>
-            <div style={{ fontSize: "10px", color: "#a87a50" }}>HARVESTED</div>
-          </div>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: "20px", color: "#f5c842" }}>💰 {coins}</div>
-            <div style={{ fontSize: "10px", color: "#a87a50" }}>COINS</div>
-          </div>
-          {phase === PHASES.FARM && (
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: "20px", color: flipsLeft <= 5 ? "#ff6b4a" : "#8dde78" }}>🃏 {flipsLeft}</div>
-              <div style={{ fontSize: "10px", color: "#a87a50" }}>FLIPS LEFT</div>
-            </div>
+
+        {/* HEADER */}
+        <div style={{
+          height: "18vh",
+          flexShrink: 0,
+          backgroundImage: "url('/strawberry/assets/screen_header.png')",
+          backgroundSize: "cover",
+          backgroundPosition: "top center",
+        }} />
+
+        {/* MESSAGE BAR */}
+        <div style={{
+          height: "6vh",
+          flexShrink: 0,
+          background: "rgba(0,0,0,0.4)",
+          backdropFilter: "blur(4px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "0 16px",
+          textAlign: "center",
+        }}>
+          {message === null ? (
+            <span style={{ fontFamily: "'Fredoka One', cursive", fontSize: "15px", color: "#f5c842" }}>
+              ✨ Happy Strawberry Farm Solitaire ✨
+            </span>
+          ) : (
+            <span style={{ fontSize: "14px", color: "#f5e6c8" }}>
+              {message}
+              {rainActive && <span style={{ marginLeft: "8px", color: "#7ec8e3" }}>☔ 2x Active!</span>}
+            </span>
           )}
         </div>
-      </div>
 
-      <div style={{ padding: "20px", maxWidth: "700px", margin: "0 auto" }}>
+        {/* MAIN AREA — card grid or sell/shop */}
+        <div style={{ height: "58vh", flexShrink: 0, position: "relative" }}>
 
-        {/* Message bar */}
-        <div style={{
-          background: "rgba(255,255,255,0.05)",
-          border: "1px solid rgba(200,150,80,0.3)",
-          borderRadius: "8px",
-          padding: "10px 16px",
-          marginBottom: "20px",
-          fontSize: "14px",
-          color: "#e8d0a0",
-          textAlign: "center",
-          minHeight: "38px",
-        }}>
-          {message}
-          {rainActive && <span style={{ marginLeft: "8px", color: "#7ec8e3" }}>☔ 2x Active!</span>}
-        </div>
-
-        {/* FARM PHASE */}
-        {phase === PHASES.FARM && (
-          <>
+          {/* FARM PHASE */}
+          {phase === PHASES.FARM && (
             <div style={{
+              width: "100%",
+              height: "100%",
+              backgroundImage: "url('/strawberry/assets/background-field.png')",
+              backgroundSize: "cover",
+              backgroundPosition: "center",
               display: "grid",
-              gridTemplateColumns: "repeat(5, 1fr)",
-              gap: "10px",
-              marginBottom: "20px",
+              gridTemplateColumns: "repeat(4, 1fr)",
+              gridTemplateRows: "repeat(5, 1fr)",
+              gap: "8px",
+              padding: "8px",
+              boxSizing: "border-box",
             }}>
               {deck.map((card) => {
                 const isSelected = selected?.uid === card.uid;
                 const isShaking = shake === card.uid;
                 const isSparkle = sparkle === card.uid;
+
                 return (
                   <div
                     key={card.uid}
                     onClick={() => flipCard(card.uid)}
+                    className={isShaking ? "card-shake" : isSparkle ? "card-sparkle" : ""}
                     style={{
-                      width: "100%",
-                      aspectRatio: "3/4",
-                      borderRadius: "10px",
+                      borderRadius: "16px",
                       cursor: card.matched || card.flipped ? "default" : "pointer",
-                      position: "relative",
-                      transition: "transform 0.15s",
-                      transform: isShaking ? "scale(0.9)" : isSelected ? "scale(1.08) translateY(-4px)" : "scale(1)",
+                      overflow: "hidden",
                       opacity: card.matched ? 0.15 : 1,
-                      background: card.flipped
-                        ? card.matched
-                          ? "rgba(100,180,80,0.2)"
-                          : "linear-gradient(135deg, #2a1505, #3d2010)"
-                        : "linear-gradient(135deg, #1e3a1e, #2a4f1a)",
-                      border: isSelected
-                        ? "2px solid #f5c842"
-                        : card.matched
-                        ? "2px solid rgba(100,180,80,0.3)"
-                        : card.flipped
-                        ? "2px solid #8b5a2b"
-                        : "2px solid #3a6e2a",
+                      pointerEvents: card.matched ? "none" : "auto",
                       boxShadow: isSelected
-                        ? "0 0 16px rgba(245,200,66,0.6)"
-                        : isSparkle
-                        ? "0 0 20px rgba(100,220,100,0.8)"
-                        : "0 2px 8px rgba(0,0,0,0.4)",
+                        ? "0 0 0 3px #f5c842, 0 0 16px rgba(245,200,66,0.6)"
+                        : "0 4px 12px rgba(0,0,0,0.35)",
+                      backgroundImage: card.flipped ? "none" : "url('/strawberry/assets/card_cover.png')",
+                      backgroundSize: "cover",
+                      backgroundPosition: "center",
+                      backgroundColor: card.flipped ? "#c8843a" : "transparent",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      fontSize: card.flipped ? "32px" : "24px",
-                      userSelect: "none",
+                      position: "relative",
                     }}
                   >
-                    {card.flipped ? card.emoji : "🌱"}
-                    {isSparkle && (
-                      <div style={{
-                        position: "absolute", inset: 0, borderRadius: "10px",
-                        background: "radial-gradient(circle, rgba(255,220,100,0.4) 0%, transparent 70%)",
-                        pointerEvents: "none",
-                      }} />
+                    {card.flipped && (
+                      <>
+                        <img
+                          src={ASSET[card.id]}
+                          alt={card.label}
+                          style={{
+                            width: "80%",
+                            height: "80%",
+                            objectFit: "contain",
+                          }}
+                        />
+                        {card.id === "golden" && (
+                          <span style={{
+                            position: "absolute",
+                            top: "4px",
+                            right: "4px",
+                            fontSize: "14px",
+                          }}>⭐</span>
+                        )}
+                      </>
                     )}
                   </div>
                 );
               })}
             </div>
+          )}
 
-            {/* Round earnings preview */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-              <div style={{ fontSize: "13px", color: roundEarnings >= 0 ? "#8dde78" : "#ff6b4a" }}>
-                Round earnings: {roundEarnings >= 0 ? "+" : ""}{roundEarnings} coins
+          {/* SELL PHASE */}
+          {phase === PHASES.SELL && (
+            <div style={{
+              width: "100%",
+              height: "100%",
+              backgroundImage: "url('/strawberry/assets/screen_header.png')",
+              backgroundSize: "cover",
+              backgroundPosition: "top center",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}>
+              <div style={{
+                background: "rgba(15,8,3,0.78)",
+                backdropFilter: "blur(10px)",
+                borderRadius: "16px",
+                padding: "24px 28px",
+                textAlign: "center",
+                width: "80%",
+              }}>
+                <div style={{ fontSize: "36px", marginBottom: "8px" }}>🏪</div>
+                <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: "20px", color: "#f5c842", marginBottom: "12px" }}>Market Report</div>
+                <div style={{ fontSize: "32px", color: roundEarnings >= 0 ? "#8dde78" : "#ff6b4a", fontFamily: "'Fredoka One', cursive" }}>
+                  {roundEarnings >= 0 ? "+" : ""}{roundEarnings} coins
+                </div>
+                <div style={{ fontSize: "12px", color: "#a87a50", marginBottom: "12px" }}>from this harvest</div>
+                <div style={{ fontSize: "16px", color: "#f5c842", fontFamily: "'Fredoka One', cursive", marginBottom: "4px" }}>Total: 💰 {coins}</div>
+                <div style={{ fontSize: "12px", color: "#c8a87a", marginBottom: "20px" }}>🍓 {berryCount} pairs harvested</div>
+                <div style={{ display: "flex", gap: "10px", justifyContent: "center", flexWrap: "wrap" }}>
+                  <button {...pillBtn(goToShop, null, { background: "linear-gradient(135deg, #1a3a8a, #2a5acc)", border: "2px solid #4a7aff", color: "#e8f0ff" })}>
+                    🏬 Visit Shop
+                  </button>
+                  <button {...pillBtn(nextRound)}>
+                    🌱 Next Round
+                  </button>
+                </div>
               </div>
+            </div>
+          )}
+
+          {/* SHOP PHASE */}
+          {phase === PHASES.SHOP && (
+            <div style={{
+              width: "100%",
+              height: "100%",
+              backgroundImage: "url('/strawberry/assets/screen_header.png')",
+              backgroundSize: "cover",
+              backgroundPosition: "top center",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              overflowY: "auto",
+            }}>
+              <div style={{
+                background: "rgba(15,8,3,0.78)",
+                backdropFilter: "blur(10px)",
+                borderRadius: "16px",
+                padding: "20px",
+                width: "85%",
+                maxHeight: "90%",
+                overflowY: "auto",
+              }}>
+                <div style={{ textAlign: "center", marginBottom: "14px" }}>
+                  <div style={{ fontSize: "32px" }}>🏬</div>
+                  <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: "20px", color: "#f5c842" }}>Farm Shop</div>
+                  <div style={{ fontSize: "12px", color: "#a87a50" }}>💰 {coins} coins available</div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
+                  {UPGRADES.map(upg => {
+                    const owned = upgrades.includes(upg.id);
+                    const canAfford = coins >= upg.cost;
+                    return (
+                      <div key={upg.id} style={{
+                        background: owned ? "rgba(80,180,60,0.1)" : "rgba(255,255,255,0.05)",
+                        border: owned ? "1px solid rgba(80,180,60,0.4)" : "1px solid rgba(200,150,80,0.2)",
+                        borderRadius: "10px",
+                        padding: "12px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}>
+                        <div>
+                          <div style={{ fontSize: "14px", color: "#f5e6c8", fontFamily: "'Nunito', sans-serif", fontWeight: 700 }}>{upg.icon} {upg.label}</div>
+                          <div style={{ fontSize: "11px", color: "#a87a50", marginTop: "2px" }}>{upg.desc}</div>
+                        </div>
+                        {owned ? (
+                          <div style={{ color: "#8dde78", fontSize: "13px" }}>✓ Owned</div>
+                        ) : (
+                          <button
+                            onClick={() => buyUpgrade(upg)}
+                            disabled={!canAfford}
+                            style={{
+                              background: canAfford ? "linear-gradient(135deg, #8b6a10, #c8951a)" : "rgba(255,255,255,0.05)",
+                              border: canAfford ? "2px solid #e8b530" : "2px solid rgba(255,255,255,0.1)",
+                              borderRadius: "30px",
+                              color: canAfford ? "#f5e6c8" : "#666",
+                              padding: "6px 14px",
+                              fontSize: "13px",
+                              fontFamily: "'Fredoka One', cursive",
+                              cursor: canAfford ? "pointer" : "not-allowed",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            💰 {upg.cost}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <button {...pillBtn(nextRound)}>🌱 Back to Farm</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* FOOTER */}
+        <div style={{
+          height: "18vh",
+          flexShrink: 0,
+          position: "relative",
+          backgroundImage: "url('/strawberry/assets/screen_footer.png')",
+          backgroundSize: "cover",
+          backgroundPosition: "top center",
+        }}>
+          {/* Stats row ~30% from top */}
+          <div style={{
+            position: "absolute",
+            top: "28%",
+            left: 0,
+            right: 0,
+            display: "flex",
+            justifyContent: "center",
+            gap: "28px",
+          }}>
+            {[
+              { icon: "🌾", value: berryCount, label: "HARVESTED" },
+              { icon: "💰", value: coins, label: "COINS" },
+              ...(phase === PHASES.FARM ? [{ icon: "🃏", value: flipsLeft, label: "FLIPS LEFT", warn: flipsLeft <= 5 }] : []),
+            ].map(({ icon, value, label, warn }) => (
+              <div key={label} style={{ textAlign: "center" }}>
+                <div style={{
+                  fontFamily: "'Fredoka One', cursive",
+                  fontSize: "20px",
+                  color: warn ? "#ff6b4a" : "#f5c842",
+                }}>
+                  {icon} {value}
+                </div>
+                <div style={{
+                  fontFamily: "'Nunito', sans-serif",
+                  fontSize: "10px",
+                  color: "#c8a87a",
+                  letterSpacing: "1px",
+                }}>
+                  {label}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* End Harvest button ~65% from top, farm phase only */}
+          {phase === PHASES.FARM && (
+            <div style={{
+              position: "absolute",
+              top: "62%",
+              left: 0,
+              right: 0,
+              display: "flex",
+              justifyContent: "center",
+            }}>
               <button
                 onClick={endRound}
                 style={{
-                  background: "linear-gradient(135deg, #8b2f0a, #c84a1a)",
+                  width: "70%",
+                  background: "linear-gradient(135deg, #c84a1a, #8b2f0a)",
                   border: "2px solid #e86030",
+                  borderRadius: "30px",
                   color: "#f5e6c8",
-                  padding: "10px 24px",
-                  borderRadius: "8px",
-                  fontSize: "14px",
+                  fontFamily: "'Fredoka One', cursive",
+                  fontSize: "16px",
                   cursor: "pointer",
-                  fontFamily: "Georgia, serif",
-                  letterSpacing: "1px",
+                  padding: "8px 0",
                 }}
               >
                 🌾 End Harvest
               </button>
             </div>
-
-            {/* Upgrades reminder */}
-            {upgrades.length > 0 && (
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                {upgrades.map(u => {
-                  const upg = UPGRADES.find(x => x.id === u);
-                  return (
-                    <div key={u} style={{
-                      background: "rgba(100,200,80,0.1)", border: "1px solid rgba(100,200,80,0.3)",
-                      borderRadius: "6px", padding: "4px 10px", fontSize: "11px", color: "#8dde78",
-                    }}>
-                      {upg.icon} {upg.label}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        )}
-
-        {/* SELL PHASE */}
-        {phase === PHASES.SELL && (
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: "48px", marginBottom: "12px" }}>🏪</div>
-            <h2 style={{ fontSize: "22px", color: "#f5c842", marginBottom: "8px" }}>Market Report</h2>
-            <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: "12px", padding: "24px", marginBottom: "20px" }}>
-              <div style={{ fontSize: "36px", marginBottom: "8px", color: roundEarnings >= 0 ? "#8dde78" : "#ff6b4a" }}>
-                {roundEarnings >= 0 ? "+" : ""}{roundEarnings} coins
-              </div>
-              <div style={{ fontSize: "13px", color: "#a87a50" }}>from this harvest</div>
-              <div style={{ marginTop: "16px", paddingTop: "16px", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
-                <div style={{ fontSize: "18px", color: "#f5c842" }}>Total: 💰 {coins}</div>
-              </div>
-              <div style={{ marginTop: "12px", fontSize: "13px", color: "#c8a87a" }}>
-                🍓 {berryCount} pairs harvested this round
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
-              <button onClick={goToShop} style={{
-                background: "linear-gradient(135deg, #1a3a8a, #2a5acc)",
-                border: "2px solid #4a7aff", color: "#e8f0ff",
-                padding: "12px 28px", borderRadius: "8px", fontSize: "15px",
-                cursor: "pointer", fontFamily: "Georgia, serif",
-              }}>
-                🏬 Visit Shop
-              </button>
-              <button onClick={nextRound} style={{
-                background: "linear-gradient(135deg, #2a6a1a, #3a8a28)",
-                border: "2px solid #5ac83a", color: "#e8f5e0",
-                padding: "12px 28px", borderRadius: "8px", fontSize: "15px",
-                cursor: "pointer", fontFamily: "Georgia, serif",
-              }}>
-                🌱 Next Round
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* SHOP PHASE */}
-        {phase === PHASES.SHOP && (
-          <div>
-            <div style={{ textAlign: "center", marginBottom: "20px" }}>
-              <div style={{ fontSize: "48px" }}>🏬</div>
-              <h2 style={{ fontSize: "22px", color: "#f5c842" }}>Farm Shop</h2>
-              <div style={{ color: "#a87a50", fontSize: "13px" }}>💰 {coins} coins available</div>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "24px" }}>
-              {UPGRADES.map(upg => {
-                const owned = upgrades.includes(upg.id);
-                const canAfford = coins >= upg.cost;
-                return (
-                  <div key={upg.id} style={{
-                    background: owned ? "rgba(80,180,60,0.1)" : "rgba(255,255,255,0.05)",
-                    border: owned ? "1px solid rgba(80,180,60,0.4)" : "1px solid rgba(200,150,80,0.2)",
-                    borderRadius: "10px", padding: "16px",
-                    display: "flex", alignItems: "center", justifyContent: "space-between",
-                  }}>
-                    <div>
-                      <div style={{ fontSize: "15px", color: "#f5e6c8" }}>{upg.icon} {upg.label}</div>
-                      <div style={{ fontSize: "12px", color: "#a87a50", marginTop: "4px" }}>{upg.desc}</div>
-                    </div>
-                    {owned ? (
-                      <div style={{ color: "#8dde78", fontSize: "13px" }}>✓ Owned</div>
-                    ) : (
-                      <button onClick={() => buyUpgrade(upg)} disabled={!canAfford} style={{
-                        background: canAfford ? "linear-gradient(135deg, #8b6a10, #c8951a)" : "rgba(255,255,255,0.05)",
-                        border: canAfford ? "2px solid #e8b530" : "2px solid rgba(255,255,255,0.1)",
-                        color: canAfford ? "#f5e6c8" : "#666",
-                        padding: "8px 16px", borderRadius: "6px", fontSize: "13px",
-                        cursor: canAfford ? "pointer" : "not-allowed",
-                        fontFamily: "Georgia, serif", whiteSpace: "nowrap",
-                      }}>
-                        💰 {upg.cost}
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            <div style={{ textAlign: "center" }}>
-              <button onClick={nextRound} style={{
-                background: "linear-gradient(135deg, #2a6a1a, #3a8a28)",
-                border: "2px solid #5ac83a", color: "#e8f5e0",
-                padding: "12px 32px", borderRadius: "8px", fontSize: "15px",
-                cursor: "pointer", fontFamily: "Georgia, serif",
-              }}>
-                🌱 Back to Farm
-              </button>
-            </div>
-          </div>
-        )}
+          )}
+        </div>
 
       </div>
-    </div>
+    </>
   );
 }
