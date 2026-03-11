@@ -57,6 +57,7 @@ export default function StrawberrySolitaire() {
   const [roundEarnings, setRoundEarnings] = useState(0);
   const [shaking, setShaking] = useState(new Set());
   const [fieldCleared, setFieldCleared] = useState(false);
+  const [locked, setLocked] = useState(false);
 
   const startRound = useCallback((upgs = upgrades) => {
     const newDeck = generateDeck(upgs);
@@ -67,6 +68,7 @@ export default function StrawberrySolitaire() {
     setSelected(null);
     setMessage(null);
     setFieldCleared(false);
+    setLocked(false);
   }, [upgrades]);
 
   useEffect(() => { startRound(); }, []);
@@ -77,43 +79,44 @@ export default function StrawberrySolitaire() {
   };
 
   const flipCard = (uid) => {
+    if (locked) return;
     const card = deck.find(c => c.uid === uid);
     if (!card || card.flipped || card.matched) return;
 
-    if (selected === null) {
-      setDeck(d => d.map(c => c.uid === uid ? { ...c, flipped: true } : c));
+    setDeck(d => d.map(c => c.uid === uid ? { ...c, flipped: true } : c));
+
+    if (!selected) {
       setSelected(card);
       return;
     }
 
-    const first = selected;
-    setSelected(null);
-
-    if (first.id === card.id) {
-      // MATCH — flip current card and mark both matched in one update
-      const newDeck = deck.map(c => {
-        if (c.uid === uid)       return { ...c, flipped: true, matched: true };
-        if (c.uid === first.uid) return { ...c, matched: true };
-        return c;
-      });
+    if (selected.id === card.id) {
+      // MATCH — gold border both, clear selected
+      setDeck(d => d.map(c =>
+        (c.uid === uid || c.uid === selected.uid) ? { ...c, matched: true } : c
+      ));
       const earned = card.value * 2;
       setRoundEarnings(e => e + earned);
-      setDeck(newDeck);
+      const newDeck = deck.map(c =>
+        (c.uid === uid || c.uid === selected.uid) ? { ...c, flipped: true, matched: true } : c
+      );
       const allMatched = newDeck.every(c => c.matched);
       if (allMatched) {
         setMessage("🎉 Field cleared! Tap End Harvest.");
         setFieldCleared(true);
       } else {
-        setMessage(earned > 0
-          ? `✨ Match! +${earned} coins!`
-          : `😬 Matched a ${card.id}! ${earned} coins.`
-        );
+        setMessage("✨ Match! Keep going!");
       }
+      setSelected(null);
     } else {
-      // NO MATCH — flip current card, both stay face-up, shake both
-      setDeck(d => d.map(c => c.uid === uid ? { ...c, flipped: true } : c));
-      triggerShake(uid, first.uid);
-      setMessage("❌ No match! Keep looking.");
+      // NO MATCH — flip second card back after 900ms, first card stays selected+open
+      setLocked(true);
+      const secondUid = uid;
+      setTimeout(() => {
+        setDeck(d => d.map(c => c.uid === secondUid ? { ...c, flipped: false } : c));
+        setLocked(false);
+      }, 900);
+      setMessage("❌ Not a match! Keep looking for " + selected.id);
     }
   };
 
@@ -231,10 +234,8 @@ export default function StrawberrySolitaire() {
                     backgroundImage: faceUp ? "none" : "url('/strawberry/assets/card_cover.png')",
                     backgroundSize: "cover",
                     backgroundPosition: "center",
-                    boxShadow: card.matched
+                    boxShadow: (card.matched || isSelected)
                       ? "0 0 0 3px #f5c842, 0 0 12px rgba(245,200,66,0.5)"
-                      : isSelected
-                      ? "0 0 0 3px #f5c842, 0 0 16px rgba(245,200,66,0.6)"
                       : "0 4px 12px rgba(0,0,0,0.35)",
                     transition: "transform 0.15s",
                   }}
