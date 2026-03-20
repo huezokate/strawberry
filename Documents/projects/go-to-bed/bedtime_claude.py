@@ -87,7 +87,45 @@ FRAME3 = [
     "    B   B     ",
 ]
 
+# Wave frame 1 - arm raised to shoulder level
+WAVE_FRAME1 = [
+    "    BBBBB     ",
+    "   BSSSSSB    ",
+    "   BSWWWSB    ",
+    "   BSOOOSB    ",
+    "   BSWWWSB    ",
+    " BN BSSSSSB   ",
+    " BN BCCCCB    ",
+    "   BCCCCCNB   ",
+    "   BCCCCCNB   ",
+    "   BCCCCB     ",
+    "   BD  DB     ",
+    "   BD  DB     ",
+    "   BDB BDB    ",
+    "    B   B     ",
+]
+
+# Wave frame 2 - arm raised above head
+WAVE_FRAME2 = [
+    " BS BBBBBB    ",
+    " BN BSSSSSB   ",
+    "   BSWWWSB    ",
+    "   BSOOOSB    ",
+    "   BSWWWSB    ",
+    "   BSSSSSB    ",
+    "   BCCCCB     ",
+    "   BCCCCCNB   ",
+    "   BCCCCCNB   ",
+    "   BCCCCB     ",
+    "   BD  DB     ",
+    "   BD  DB     ",
+    "   BDB BDB    ",
+    "    B   B     ",
+]
+
 FRAMES = [FRAME1, FRAME2, FRAME3, FRAME2]
+WAVE_FRAMES = [WAVE_FRAME1, WAVE_FRAME2]
+WAVE_CYCLES = 2  # play the 2-frame sequence this many times before showing bubble
 
 PIXEL = 5  # pixel size in display pixels
 SPRITE_W = 14 * PIXEL
@@ -151,6 +189,8 @@ class BedtimeClaude:
         self.alpha = 0.97
         self.snooze_mode = False
         self._launch_snooze = False
+        self.waving = False
+        self.wave_idx = 0
 
         self.canvas.bind('<Button-1>', self._on_canvas_click)
         self._draw_frame()
@@ -225,7 +265,11 @@ class BedtimeClaude:
         sprite_x = (self.total_w - SPRITE_W) // 2
         sprite_y = self.bubble_h + 10
         self._draw_speech_bubble(self.bubble_visible)
-        self._draw_pixel_frame(FRAMES[self.frame_idx], sprite_x, sprite_y)
+        if self.waving:
+            frame = WAVE_FRAMES[self.wave_idx % len(WAVE_FRAMES)]
+        else:
+            frame = FRAMES[self.frame_idx]
+        self._draw_pixel_frame(frame, sprite_x, sprite_y)
 
     def _on_canvas_click(self, event):
         """Handle canvas click — snooze if bubble is visible."""
@@ -276,16 +320,28 @@ class BedtimeClaude:
             self.root.after(80, self._animate)
             return
 
+        if self.waving:
+            self.wave_idx += 1
+            if self.wave_idx >= WAVE_CYCLES * len(WAVE_FRAMES):
+                self.waving = False
+                self.paused = True
+                self.bubble_visible = True
+                self.pause_timer = 60
+                self.direction = 0
+            self._draw_frame()
+            self.root.after(120, self._animate)
+            return
+
         # Move sprite
         self.x += self.direction * self.speed
         self.root.geometry(f"{self.total_w}x{self.total_h}+{self.x}+{self.y}")
 
-        # Pause in center of screen and show bubble
+        # Pause in center of screen — play wave first, then show bubble
         center_zone = self.sw // 2 - self.total_w // 2
-        if not self.bubble_visible and self.x <= center_zone + 10 and self.x >= center_zone - 10:
-            self.paused = True
-            self.bubble_visible = True
-            self.pause_timer = 60  # ~5 seconds at 80ms
+        if not self.bubble_visible and not self.waving \
+                and self.x <= center_zone + 10 and self.x >= center_zone - 10:
+            self.waving = True
+            self.wave_idx = 0
             self.direction = 0
 
         # Walk off left edge → fade out
